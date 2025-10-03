@@ -1,4 +1,6 @@
-# Ignore environment and sensitive files
+node_modules/
+__pycache__/
+*.log
 .env
 __pycache__/
 *.pyc
