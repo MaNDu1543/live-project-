@@ -1,9 +1,7 @@
 # summarize.py
 
-# IMPORTANT: You must set your Gemini API key in the .env file as:
-# GEMINI_API_KEY=your_api_key_here
-
 import os
+import time
 import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter
@@ -18,27 +16,35 @@ GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemin
 # Create FastAPI router
 router = APIRouter()
 
-# --------- API CALL FUNCTION ----------
-def call_gemini_api(prompt: str) -> str:
-    """Call Gemini API with a given prompt"""
-    try:
-        response = requests.post(
-            GEMINI_API_URL,
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "[No summary returned]")
+# --------- API CALL FUNCTION WITH RETRIES ----------
+def call_gemini_api(prompt: str, retries: int = 3, timeout: int = 60) -> str:
+    """Call Gemini API with retry + longer timeout"""
+    for attempt in range(retries):
+        try:
+            response = requests.post(
+                GEMINI_API_URL,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=timeout
             )
-        else:
-            return f"[Gemini API Error: {response.status_code}] {response.text}"
-    except requests.exceptions.RequestException as e:
-        return f"[Gemini API Exception] {str(e)}"
+            if response.status_code == 200:
+                data = response.json()
+                return (
+                    data.get("candidates", [{}])[0]
+                    .get("content", {})
+                    .get("parts", [{}])[0]
+                    .get("text", "[No summary returned]")
+                )
+            else:
+                return f"[Gemini API Error: {response.status_code}] {response.text}"
+
+        except requests.exceptions.ReadTimeout:
+            if attempt < retries - 1:
+                time.sleep(2)  # backoff before retry
+                continue
+            return "[Gemini API Exception] Request timed out"
+
+        except requests.exceptions.RequestException as e:
+            return f"[Gemini API Exception] {str(e)}"
 
 
 # --------- SUMMARIZATION HELPERS ----------
